@@ -10,7 +10,7 @@ import (
 )
 
 
-func main() {
+func simpleAPI() {
 	
 	http.HandleFunc("/orders", func (w http.ResponseWriter, r *http.Request){
 		fmt.Fprintf(w, "Handling incoming orders")
