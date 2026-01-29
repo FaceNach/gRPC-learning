@@ -1,12 +1,14 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strings"
+	mw "rest_api_go/internal/api/middlewares"
+	
 )
 
 type User struct {
@@ -23,27 +25,15 @@ func rootHandler(w http.ResponseWriter, r *http.Request){
 
 func teachersHandler(w http.ResponseWriter, r *http.Request){
 	
-	
-		
 		switch r.Method{
 			case http.MethodGet:
 				fmt.Println("URL params: ", r.URL.Path )
-				path := strings.TrimPrefix(r.URL.Path, "/teachers/")
-				userID := strings.TrimSuffix(path, "/")
-				
-				fmt.Println("URL id: ", userID)
+			
 				w.Write([]byte("Hello GET method on teachers route"))
 				fmt.Println("Hello GET method on teachers route")
 				fmt.Println("Query params: ", r.URL.Query())
-				values := r.URL.Query()
-				test := values.Get("test")
-				phrase := values.Get("phrase")
-				id := values.Get("id")
-				
-				fmt.Printf("Test: %v\nPhrase: %v\nId: %v\n", test, phrase, id)
 				
 			case http.MethodPost:
-			
 			//parse the form data(neccesary for form-urlencoded)
 				err := r.ParseForm()
 				if err != nil{
@@ -67,7 +57,7 @@ func teachersHandler(w http.ResponseWriter, r *http.Request){
 				
 				defer r.Body.Close()
 				
-				fmt.Println(body)
+				fmt.Println(body) //don't convert, its a []byte on purpose
 				fmt.Println(string(body))
 			
 				var user User
@@ -131,21 +121,30 @@ func execsHandler(w http.ResponseWriter, r *http.Request){
 func main() {
 	port := 3000
 	
-	http.HandleFunc("/", rootHandler)
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/teachers", teachersHandler)
+	mux.HandleFunc("/students", studentsHandler)
+	mux.HandleFunc("/execs", execsHandler)
 	
-	http.HandleFunc("/teachers/", teachersHandler)
+	cert := "cert.pem"
+	key := "key.pem"
 	
-	http.HandleFunc("/students", studentsHandler)
-	
-	http.HandleFunc("/execs", execsHandler)
-	
-	fmt.Println("Listening server on port:", port)
-	
-	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-	if err != nil{
-		log.Fatalln("Error creating the server: ", err)
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
 	}
 	
-
+	server := &http.Server{
+		Addr: ":3000",
+		Handler: mw.SecurityHeaders((mw.Cors(mux))),
+		TLSConfig: tlsConfig,
+	}
+	
+	fmt.Println("Listening server on port:", port)
+	err := server.ListenAndServeTLS(cert, key)
+	if err != nil {
+		log.Fatalln("Error creating server: ", err)
+	}
 }
 

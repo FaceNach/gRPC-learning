@@ -1,0 +1,6 @@
+cert.pem
+key.pem
+openssl.cnf
+
+/tmp
+.air.toml
