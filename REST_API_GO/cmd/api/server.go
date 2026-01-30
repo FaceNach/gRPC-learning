@@ -11,6 +11,37 @@ import (
 	
 )
 
+
+func main() {
+	port := 3000
+	
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/teachers", teachersHandler)
+	mux.HandleFunc("/students", studentsHandler)
+	mux.HandleFunc("/execs", execsHandler)
+	
+	cert := "cert.pem"
+	key := "key.pem"
+	
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	
+	server := &http.Server{
+		Addr: ":3000",
+		Handler: mw.Compression(mw.ResponseTime(mw.SecurityHeaders((mw.Cors(mux))))),
+		TLSConfig: tlsConfig,
+	}
+	
+	fmt.Println("Listening server on port:", port)
+	err := server.ListenAndServeTLS(cert, key)
+	if err != nil {
+		log.Fatalln("Error creating server: ", err)
+	}
+}
+
 type User struct {
 	Name string `json:"name"`
 	Age int		`json:"age"`
@@ -118,33 +149,4 @@ func execsHandler(w http.ResponseWriter, r *http.Request){
 	}
 
 
-func main() {
-	port := 3000
-	
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/", rootHandler)
-	mux.HandleFunc("/teachers", teachersHandler)
-	mux.HandleFunc("/students", studentsHandler)
-	mux.HandleFunc("/execs", execsHandler)
-	
-	cert := "cert.pem"
-	key := "key.pem"
-	
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-	
-	server := &http.Server{
-		Addr: ":3000",
-		Handler: mw.SecurityHeaders((mw.Cors(mux))),
-		TLSConfig: tlsConfig,
-	}
-	
-	fmt.Println("Listening server on port:", port)
-	err := server.ListenAndServeTLS(cert, key)
-	if err != nil {
-		log.Fatalln("Error creating server: ", err)
-	}
-}
 
