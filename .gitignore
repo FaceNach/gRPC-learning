@@ -3,3 +3,5 @@ key.perm
 
 rest_api_go/cmd/api/tmp
 .air.toml
+
+.zed
