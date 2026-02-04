@@ -11,8 +11,6 @@ import (
 
 func ConnectDb() (*sql.DB, error) {
 
-	fmt.Println("Connecting to DB")
-
 	err := godotenv.Load()
 	if err != nil {
 		return nil, err
@@ -24,7 +22,6 @@ func ConnectDb() (*sql.DB, error) {
 	dbPort := os.Getenv("DB_PORT")
 	host := os.Getenv("HOST")
 
-	//connectionString := "nachgo:1234@tcp(127.0.0.1:3306)/" + dbName
 	connectionString := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, password, host, dbPort, dbName)
 
 	db, err := sql.Open("mysql", connectionString)
@@ -33,6 +30,5 @@ func ConnectDb() (*sql.DB, error) {
 		return nil, err
 	}
 
-	fmt.Println("Connected to DB/MariaDB successfully")
 	return db, nil
 }

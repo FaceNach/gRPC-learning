@@ -20,11 +20,14 @@ func main() {
 		return 
 	}
 
+	fmt.Println("Connecting to DB")
 	_, err = sqlconnect.ConnectDb()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	
+	fmt.Println("Connected to DB/MariaDB successfully")
 	
 	router := router.Router()
 
