@@ -13,9 +13,10 @@ import (
 
 func GetTeachersHandler(w http.ResponseWriter, r *http.Request) {
 
-	teachersList, err := sqlconnect.GetTeachersDBHandler(w, r)
+	teachersList, err := sqlconnect.GetTeachersDBHandler(r)
 	if err != nil {
 		log.Printf("error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -40,24 +41,45 @@ func GetTeachersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
+	
+	idStr := r.PathValue("id")
 
-	teacher, err := sqlconnect.GetOneTeacherDBHandler(w, r)
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return 
+	}
+
+	teacher, err := sqlconnect.GetOneTeacherDBHandler(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 
 	err = json.NewEncoder(w).Encode(teacher)
 	if err != nil {
-		http.Error(w, "Error trying to access only one teacher", http.StatusBadRequest)
+		http.Error(w, "error parsing data", http.StatusInternalServerError)
+		return
 	}
 }
 
-
-
 func AddTeacherHandler(w http.ResponseWriter, r *http.Request) {
 
-	addedTeachers, err := sqlconnect.AddedTeachersDBHandler(w, r)
+	var newTeachers []models.Teacher
+	err := json.NewDecoder(r.Body).Decode(&newTeachers)
 	if err != nil {
 		log.Printf("error: %v", err)
+		http.Error(w, "error parsing data", http.StatusInternalServerError)
+		return
+	}
+
+	addedTeachers, err := sqlconnect.AddedTeachersDBHandler(newTeachers)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -75,21 +97,10 @@ func AddTeacherHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		http.Error(w, "Error posting the teacher", http.StatusBadRequest)
-	}
-}
-
-
-
-func PatchTeachersHandler(w http.ResponseWriter, r *http.Request) {
-	err := sqlconnect.PatchTeachersDBHandler(w,r)
-	if err != nil {
-		log.Printf("error: %v",err)
+		log.Printf("error: %v", err)
+		http.Error(w, "error parsing data", http.StatusBadRequest)
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
-
 }
 
 // PUT /teachers/
@@ -166,11 +177,54 @@ func UpdateTeacherHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func PatchTeachersHandler(w http.ResponseWriter, r *http.Request) {
+
+	var updates []map[string]interface{}
+
+	err := json.NewDecoder(r.Body).Decode(&updates)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "error parsing data", http.StatusInternalServerError)
+		return
+	}
+
+	err = sqlconnect.PatchTeachersDBHandler(updates, r)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 //PATCH /teachers/{id}
 
 func PatchOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
 
-	updatedTeacher, err := sqlconnect.PatchOneTeacherDBHandler(w,r)
+	var updates map[string]any
+
+	err := json.NewDecoder(r.Body).Decode(&updates)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "error parsing the data", http.StatusInternalServerError)
+		return
+	}
+
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	updatedTeacher, err := sqlconnect.PatchOneTeacherDBHandler(updates, id)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(updatedTeacher)
@@ -183,8 +237,21 @@ func PatchOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
 
 func DeleteOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
 
-	id, err := sqlconnect.DeleteOneTeacherDBHandler(w,r)
-	
+	idStr := r.PathValue("id")
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	idDeleted, err := sqlconnect.DeleteOneTeacherDBHandler(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	response := struct {
@@ -192,7 +259,7 @@ func DeleteOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
 		ID     int    `json:"id"`
 	}{
 		Status: "teacher deleted successfully from the DB",
-		ID:     id,
+		ID:     idDeleted,
 	}
 
 	err = json.NewEncoder(w).Encode(response)
@@ -204,8 +271,21 @@ func DeleteOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func DeleteTeachersHandler(w http.ResponseWriter, r *http.Request) {
+	
+	var idTeachersToDelete []int
 
-	deletedIds, err := sqlconnect.DeleteTeachersDBHandlers(w,r)
+	err := json.NewDecoder(r.Body).Decode(&idTeachersToDelete)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "error parsing data", http.StatusInternalServerError)
+		return
+	}
+
+	deletedIds, err := sqlconnect.DeleteTeachersDBHandlers(idTeachersToDelete)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-type", "application/json")
 	response := struct {
