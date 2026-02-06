@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"rest_api_go/internal/models"
 	"rest_api_go/internal/repository/sqlconnect"
 	"strconv"
@@ -41,14 +42,14 @@ func GetTeachersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
-	
+
 	idStr := r.PathValue("id")
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		log.Printf("error: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return 
+		return
 	}
 
 	teacher, err := sqlconnect.GetOneTeacherDBHandler(id)
@@ -74,6 +75,23 @@ func AddTeacherHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error: %v", err)
 		http.Error(w, "error parsing data", http.StatusInternalServerError)
 		return
+	}
+
+	for _, teacher := range newTeachers {
+		// if teacher.FirstName == ""  ||teacher.LastName == "" || teacher.Email == "" || teacher.Class == "" || teacher.Subject == "" {
+		// 	http.Error(w, "All fields are obligatory", http.StatusBadRequest)
+		// 	return
+		// }
+
+		val := reflect.ValueOf(teacher)
+		for i := 0; i < val.Type().NumField(); i++ {
+			field := val.Field(i)
+			if field.Kind() == reflect.String && field.String() == "" {
+				http.Error(w, "All fields are obligatory", http.StatusBadRequest)
+				return
+			}
+		}
+
 	}
 
 	addedTeachers, err := sqlconnect.AddedTeachersDBHandler(newTeachers)
@@ -271,7 +289,7 @@ func DeleteOneTeacherHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func DeleteTeachersHandler(w http.ResponseWriter, r *http.Request) {
-	
+
 	var idTeachersToDelete []int
 
 	err := json.NewDecoder(r.Body).Decode(&idTeachersToDelete)

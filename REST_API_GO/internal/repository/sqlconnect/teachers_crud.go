@@ -141,7 +141,7 @@ func GetOneTeacherDBHandler(id int) (models.Teacher, error) {
 	return teacher, nil
 }
 
-func AddedTeachersDBHandler(newTeachers[]models.Teacher) ([]models.Teacher, error) {
+func AddedTeachersDBHandler(newTeachers []models.Teacher) ([]models.Teacher, error) {
 	db, err := ConnectDb()
 	if err != nil {
 		log.Printf("error: %v", err)
@@ -149,7 +149,6 @@ func AddedTeachersDBHandler(newTeachers[]models.Teacher) ([]models.Teacher, erro
 	}
 	defer db.Close()
 
-	
 	stmt, err := db.Prepare("INSERT INTO teachers (first_name, last_name, email, class, subject) VALUES (?,?,?,?,?)")
 	if err != nil {
 		fmt.Println(err)
@@ -179,7 +178,50 @@ func AddedTeachersDBHandler(newTeachers[]models.Teacher) ([]models.Teacher, erro
 	return addedTeachers, nil
 }
 
-func PatchTeachersDBHandler(updates []map[string]interface{} ,r *http.Request) error {
+func generateInsertQuery(model interface{}) string {
+
+	modelType := reflect.TypeOf(model)
+	var columns, placeholders string
+
+	for i := 0; i < modelType.NumField(); i++ {
+		dbTag := modelType.Field(i).Tag.Get("db")
+		fmt.Println("dbTag:", dbTag)
+
+		dbTag = strings.TrimPrefix(dbTag, ",omitempty")
+		if dbTag != "" && dbTag != "id" {
+			if columns != "" {
+				columns += ", "
+				placeholders += ", "
+			}
+			columns += dbTag
+			placeholders += "?"
+		}
+	}
+
+	fmt.Printf("INSERT INTO teachers (%s) VALUES (%s)\n", columns, placeholders)
+	
+	return fmt.Sprintf("INSERT INTO teachers (%s) VALUES (%s)", columns, placeholders)
+}
+
+func getStructValues(model interface{}) []interface{} {
+	modelValue := reflect.ValueOf(model)
+	modelType := modelValue.Type()
+
+	values := []any{}
+
+	for i := 0; i < modelType.NumField(); i++ {
+		dbTag := modelType.Field(i).Tag.Get("db")
+		if dbTag != "" && dbTag != "id,omitempty" {
+			values = append(values, modelValue.Field(i).Interface())
+		}
+	}
+	
+	log.Println("Values: ", values)
+	
+	return values
+}
+
+func PatchTeachersDBHandler(updates []map[string]interface{}, r *http.Request) error {
 	db, err := ConnectDb()
 	if err != nil {
 		fmt.Println(err)
@@ -276,7 +318,7 @@ func PatchTeachersDBHandler(updates []map[string]interface{} ,r *http.Request) e
 }
 
 func PatchOneTeacherDBHandler(updates map[string]any, id int) (models.Teacher, error) {
-	
+
 	db, err := ConnectDb()
 	if err != nil {
 		fmt.Println(err)
@@ -329,7 +371,7 @@ func PatchOneTeacherDBHandler(updates map[string]any, id int) (models.Teacher, e
 	return existingTeacher, nil
 }
 
-func DeleteOneTeacherDBHandler( id int) (int, error) {
+func DeleteOneTeacherDBHandler(id int) (int, error) {
 
 	db, err := ConnectDb()
 	if err != nil {
@@ -365,8 +407,6 @@ func DeleteTeachersDBHandlers(idTeachersToDelete []int) ([]int, error) {
 		return nil, utils.ErrorHandler(err, "internal server error")
 	}
 	defer db.Close()
-
-	
 
 	tx, err := db.Begin()
 	if err != nil {
