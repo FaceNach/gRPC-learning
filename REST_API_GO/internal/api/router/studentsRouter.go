@@ -5,10 +5,10 @@ import (
 	"rest_api_go/internal/api/handlers"
 )
 
-func studentsRouter() *http.ServeMux{
-	
+func studentsRouter() *http.ServeMux {
+
 	mux := http.NewServeMux()
-	
+
 	mux.HandleFunc("GET /{$}", handlers.GetStudentsHandler)
 	mux.HandleFunc("POST /{$}", handlers.AddStudentsHandler)
 	mux.HandleFunc("DELETE /{$}", handlers.DeleteStudentsHandler)
@@ -18,6 +18,6 @@ func studentsRouter() *http.ServeMux{
 	mux.HandleFunc("PUT /{id}", handlers.UpdateStudentHandler)
 	mux.HandleFunc("PATCH /{id}", handlers.PatchOneStudentHandler)
 	mux.HandleFunc("DELETE /{id}", handlers.DeleteOneStudentHandler)
-	
+
 	return mux
 }
