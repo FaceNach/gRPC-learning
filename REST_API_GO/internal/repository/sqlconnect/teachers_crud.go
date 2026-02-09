@@ -464,3 +464,67 @@ func DeleteTeachersDBHandlers(idTeachersToDelete []int) ([]int, error) {
 
 	return deletedId, nil
 }
+
+
+func GetStudentsByTeacherIdDBHandler (teacherId string) ([] models.Student, error) {
+	
+	var students []models.Student
+	
+	db, err := ConnectDb()
+	if err != nil {
+		log.Println(err)
+		return nil, utils.ErrorHandler(err, "error updating data")
+	}
+	
+	defer db.Close()
+	
+	query := `SELECT * FROM students WHERE class = (SELECT class from teachers WHERE id = ?)`
+	rows, err := db.Query(query, teacherId)
+	if err != nil {
+		log.Println(err)
+		return nil, utils.ErrorHandler(err, "error with DB query")
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var student models.Student
+		err := rows.Scan(&student.ID, &student.FirstName ,&student.LastName, &student.Email ,&student.Class)
+		if err != nil {
+			log.Println("error: ", err)
+			return nil, utils.ErrorHandler(err, "error extracting students from rows")
+		}
+		
+		students = append(students, student)
+	}
+	
+	err = rows.Err()
+	if err != nil {
+		log.Println("error: ", err)
+		return nil, utils.ErrorHandler(err, "interal server error, check logs")
+	}
+	
+	return students, nil
+}
+
+func GetStudentsCountByTeacherIdDBHandler (teacherId string) (int, error){
+	
+	db, err := ConnectDb()
+	if err != nil {
+		log.Println(err)
+		return 0, utils.ErrorHandler(err, "error updating data")
+	}
+	
+	defer db.Close()
+	
+	var studentsCount int
+	
+	query := `SELECT COUNT(*) FROM students WHERE class = (SELECT class FROM teachers WHERE id = ?)`
+	err = db.QueryRow(query, teacherId).Scan(&studentsCount)
+	if err != nil {
+		log.Println(err)
+		return 0, utils.ErrorHandler(err, "error with DB query")
+	}
+	
+	return studentsCount, nil
+	
+}

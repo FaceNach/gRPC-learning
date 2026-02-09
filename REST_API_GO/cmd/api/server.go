@@ -29,7 +29,7 @@ func main() {
 	
 	fmt.Println("Connected to DB/MariaDB successfully")
 	
-	router := router.Router()
+	router := router.MainRouter()
 
 	cert := "cert.pem"
 	key := "key.pem"
