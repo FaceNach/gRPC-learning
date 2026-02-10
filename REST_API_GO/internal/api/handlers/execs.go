@@ -250,16 +250,6 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "test",
-		Value:    "testing",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		Expires:  time.Now().Add(24 * time.Hour),
-		SameSite: http.SameSiteStrictMode,
-	})
-
 	w.Header().Set("Content-Type", "application/json")
 	response := struct {
 		Token string `json:"token"`
