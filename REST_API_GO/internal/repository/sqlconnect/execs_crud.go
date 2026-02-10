@@ -2,6 +2,7 @@ package sqlconnect
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"errors"
@@ -176,10 +177,10 @@ func AddExecsDBHandler(newExecs []models.Exec) ([]models.Exec, error) {
 		}
 
 		hash := argon2.IDKey([]byte(newExec.Password), salt, 1, 64*1024, 4, 32)
-		saltBase64  := base64.StdEncoding.EncodeToString(salt)
+		saltBase64 := base64.StdEncoding.EncodeToString(salt)
 		hashBase64 := base64.StdEncoding.EncodeToString(hash)
 		encodedHash := fmt.Sprintf("%s.%s", saltBase64, hashBase64)
-		
+
 		newExec.Password = encodedHash
 
 		result, err := stmt.Exec(newExec.FirstName, newExec.LastName, newExec.Email, newExec.Username, newExec.Password, newExec.Role, newExec.InactiveStatus)
@@ -442,4 +443,77 @@ func DeleteExecsDBHandlers(idExecsToDelete []int) ([]int, error) {
 	}
 
 	return deletedId, nil
+}
+
+func LoginDBHandler(exec models.Exec) (*models.Exec, error) {
+
+	if exec.Username == "" || exec.Password == "" {
+
+		return &models.Exec{}, utils.ErrorHandler(errors.New("username/password are required"), "username/password are required")
+	}
+
+	db, err := ConnectDb()
+	if err != nil {
+		log.Printf("error: %v", err)
+		return &models.Exec{}, utils.ErrorHandler(err, "error connecting to DB")
+	}
+
+	var userFromDB models.Exec
+
+	err = db.QueryRow(`SELECT id, first_name, last_name, email, username, password, inactive_status, role FROM execs WHERE username = ?`, exec.Username).
+		Scan(&userFromDB.ID,
+			&userFromDB.FirstName,
+			&userFromDB.LastName,
+			&userFromDB.Email,
+			&userFromDB.Username,
+			&userFromDB.Password,
+			&userFromDB.InactiveStatus,
+			&userFromDB.Role)
+
+	if err == sql.ErrNoRows {
+		log.Printf("error: %v", err)
+		return &models.Exec{}, utils.ErrorHandler(err, "no user found")
+	}
+
+	if err != nil {
+		log.Printf("error: %v", err)
+		return &models.Exec{}, utils.ErrorHandler(err, "internal server error")
+	}
+
+	if userFromDB.InactiveStatus {
+		return &models.Exec{}, utils.ErrorHandler(err, "account is inactive")
+	}
+
+	parts := strings.Split(userFromDB.Password, ".")
+	if len(parts) != 2 {
+		log.Printf("error: %v", errors.New("error spliting the password"))
+		return &models.Exec{}, utils.ErrorHandler(errors.New("invalid encoded hash format"), "invalid encoded hash format")
+	}
+
+	saltBase64 := parts[0]
+	hashPasswordBase64 := parts[1]
+
+	salt, err := base64.StdEncoding.DecodeString(saltBase64)
+	if err != nil {
+		log.Printf("error: %v", err)
+		return &models.Exec{}, utils.ErrorHandler(err, "error encoding password")
+	}
+
+	hashedPassword, err := base64.StdEncoding.DecodeString(hashPasswordBase64)
+	if err != nil {
+		log.Printf("error: %v", err)
+		return &models.Exec{}, utils.ErrorHandler(err, "error encoding password")
+	}
+
+	hash := argon2.IDKey([]byte(exec.Password), salt, 1, 64*1024, 4, 32)
+
+	if len(hashedPassword) != len(hash) {
+		return &models.Exec{}, utils.ErrorHandler(errors.New("incorrect password"), "incorrect password")
+	}
+
+	if subtle.ConstantTimeCompare(hashedPassword, hash) == 0 {
+		return &models.Exec{}, utils.ErrorHandler(errors.New("wrong password"), "incorrect password")
+	}
+
+	return &userFromDB, nil
 }

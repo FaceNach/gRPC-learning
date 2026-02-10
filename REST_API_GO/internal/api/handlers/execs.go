@@ -7,7 +7,9 @@ import (
 	"reflect"
 	"rest_api_go/internal/models"
 	"rest_api_go/internal/repository/sqlconnect"
+	"rest_api_go/pkg/utils"
 	"strconv"
+	"time"
 )
 
 func GetExecsHandler(w http.ResponseWriter, r *http.Request) {
@@ -210,4 +212,80 @@ func DeleteOneExecHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+}
+
+func LoginHandler(w http.ResponseWriter, r *http.Request) {
+
+	var exec models.Exec
+
+	err := json.NewDecoder(r.Body).Decode(&exec)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	user, err := sqlconnect.LoginDBHandler(exec)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userID := strconv.Itoa(user.ID)
+	tokenString, err := utils.SignToken(userID, user.Username, user.Role)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "Bearer",
+		Value:    tokenString,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		Expires:  time.Now().Add(24 * time.Hour),
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "test",
+		Value:    "testing",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		Expires:  time.Now().Add(24 * time.Hour),
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	response := struct {
+		Token string `json:"token"`
+	}{
+		Token: tokenString,
+	}
+
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		log.Printf("error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func LogoutHandler (w http.ResponseWriter, r *http.Request){
+	http.SetCookie(w, &http.Cookie{
+		Name: "Bearer",
+		Value:"",
+		Path: "/",
+		HttpOnly: true,
+		Secure: true,
+		Expires: time.Unix(0,0),
+		SameSite: http.SameSiteStrictMode,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"message" : "logged out successfully"}`))
 }
