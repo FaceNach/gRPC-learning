@@ -2,19 +2,24 @@ package sqlconnect
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"reflect"
 	"rest_api_go/internal/models"
 	"rest_api_go/pkg/utils"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/go-mail/mail/v2"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -516,4 +521,196 @@ func LoginDBHandler(exec models.Exec) (*models.Exec, error) {
 	}
 
 	return &userFromDB, nil
+}
+
+func UpdatePasswordDBHandler(userId int, req models.UpdatePasswordRequest) (string, error) {
+
+	db, err := ConnectDb()
+	if err != nil {
+		return "", utils.ErrorHandler(err, "error connecting to DB")
+	}
+	defer db.Close()
+
+	var username string
+	var userPassword string
+	var userRole string
+
+	err = db.QueryRow(`SELECT username, password, role FROM execs WHERE id =  ?`, userId).Scan(&username, &userPassword, &userRole)
+	if err == sql.ErrNoRows {
+		return "", utils.ErrorHandler(err, "no exec found with that ID")
+	}
+
+	if err != nil {
+		log.Printf("error: %v", err)
+		return "", utils.ErrorHandler(err, "error retrieving data")
+	}
+
+	parts := strings.Split(userPassword, ".")
+	if len(parts) != 2 {
+		log.Printf("error: %v", errors.New("error spliting the password"))
+		return "", utils.ErrorHandler(errors.New("invalid encoded hash format"), "invalid encoded hash format")
+	}
+
+	saltBase64 := parts[0]
+	hashPasswordBase64 := parts[1]
+
+	salt, err := base64.StdEncoding.DecodeString(saltBase64)
+	if err != nil {
+		log.Printf("error: %v", err)
+		return "", utils.ErrorHandler(err, "error encoding password")
+	}
+
+	hashedPassword, err := base64.StdEncoding.DecodeString(hashPasswordBase64)
+	if err != nil {
+		log.Printf("error: %v", err)
+		return "", utils.ErrorHandler(err, "error encoding password")
+	}
+
+	hash := argon2.IDKey([]byte(req.CurrentPassword), salt, 1, 64*1024, 4, 32)
+
+	if len(hashedPassword) != len(hash) {
+		return "", utils.ErrorHandler(errors.New("incorrect password"), "incorrect password")
+	}
+
+	if subtle.ConstantTimeCompare(hashedPassword, hash) == 0 {
+		return "", utils.ErrorHandler(errors.New("wrong password"), "incorrect password")
+	}
+
+	saltNewPassword := make([]byte, 16)
+	_, err = rand.Read(saltNewPassword)
+	if err != nil {
+		log.Printf("error: %v", err)
+		return "", utils.ErrorHandler(errors.New("failed to genereate password"), "error adding data")
+	}
+
+	hashNewPassword := argon2.IDKey([]byte(req.NewPassword), saltNewPassword, 1, 64*1024, 4, 32)
+	saltBase64NewPassword := base64.StdEncoding.EncodeToString(saltNewPassword)
+	hashBase64NewPassword := base64.StdEncoding.EncodeToString(hashNewPassword)
+	encodedHashNewPassword := fmt.Sprintf("%s.%s", saltBase64NewPassword, hashBase64NewPassword)
+
+	currentTime := time.Now().Format(time.RFC3339)
+
+	_, err = db.Exec("UPDATE execs SET password = ?, password_changed_at = ? WHERE id = ?", encodedHashNewPassword, currentTime, userId)
+	if err != nil {
+		return "", utils.ErrorHandler(err, "failed to update the password")
+	}
+
+	userIdStr := strconv.Itoa(userId)
+
+	token, err := utils.SignToken(userIdStr, username, userRole)
+	if err != nil {
+		return "", utils.ErrorHandler(err, "error generating token")
+	}
+
+	return token, nil
+}
+
+func ForgotPasswordDBHandler(email string) error {
+
+	db, err := ConnectDb()
+	if err != nil {
+		return utils.ErrorHandler(err, "error connecting to DB")
+	}
+
+	defer db.Close()
+
+	var exec models.Exec
+
+	err = db.QueryRow("SELECT id FROM execs WHERE email = ?", email).Scan(&exec.ID)
+	if err == sql.ErrNoRows {
+		return utils.ErrorHandler(err, "no user found in the DB")
+	}
+
+	if err != nil {
+		return utils.ErrorHandler(err, "error retrieving the user from the DB")
+	}
+
+	duration, err := strconv.Atoi(os.Getenv("RESET_TOKEN_EXP_DURATION"))
+	if err != nil {
+		return utils.ErrorHandler(err, "failed to send password reset email")
+	}
+
+	mins := time.Duration(duration)
+	expiry := time.Now().Add(mins * time.Minute).Format(time.RFC3339)
+
+	tokenBytes := make([]byte, 32)
+	_, err = rand.Read(tokenBytes)
+	if err != nil {
+		return utils.ErrorHandler(err, "failed to send password reset email")
+	}
+
+	log.Printf("tokenBytes: %v:", tokenBytes)
+	token := hex.EncodeToString(tokenBytes)
+	log.Printf("token: %v:", token)
+
+	hashedToken := sha256.Sum256(tokenBytes)
+	log.Printf("hashedToken: %v:", hashedToken)
+
+	hashedTokenString := hex.EncodeToString(hashedToken[:])
+
+	_, err = db.Exec("UPDATE execs SET password_reset_token = ?, password_token_expires = ? WHERE id = ?", hashedTokenString, expiry, exec.ID)
+	if err != nil {
+		return utils.ErrorHandler(err, "failed to send password reset email")
+	}
+
+	resetURL := fmt.Sprintf("https://localhost:3000/execs/resetpassword/reset/%s", token)
+	message := fmt.Sprintf("Forgot your password? Reset your password using the following link: \n %s", resetURL)
+
+	m := mail.NewMessage()
+	m.SetHeader("From", "schooladmin@school.com")
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", "Your password reset link")
+	m.SetBody("text/plain", message)
+
+	d := mail.NewDialer("localhost", 1025, "", "")
+	err = d.DialAndSend(m)
+	if err != nil {
+		return utils.ErrorHandler(err, "failed to send password reset email")
+	}
+	return nil
+}
+
+
+func ResetPassowrdDBHandler(newPassword ,token string) error {
+	db, err := ConnectDb()
+	if err != nil {
+		return utils.ErrorHandler(err, "error reseting password")
+	}
+	defer db.Close()
+	
+	tokenBytes := make([]byte, 32)
+	_, err = rand.Read(tokenBytes)
+	if err != nil {
+		return utils.ErrorHandler(err, "failed to send password reset email")
+	}
+	
+	var exec models.Exec
+	
+	bytes, err := hex.DecodeString(token)
+	if err != nil {
+		return utils.ErrorHandler(err, "internal error")
+	}
+	
+	hashedToken := sha256.Sum256(bytes)
+	hashedTokenString := hex.EncodeToString(hashedToken[:])
+	
+	query := "SELECT id, email FROM execs WHERE password_reset_token = ?  AND password_token_expires > ? "
+	err = db.QueryRow(query, hashedTokenString, time.Now().Format(time.RFC3339)).Scan(&exec.ID, &exec.Email)
+	if err != nil {
+		return utils.ErrorHandler(err, "Invalid or expired reset code")
+	}
+	
+	//Hash the new password 
+	hashedPassowrd, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return utils.ErrorHandler(err, "internal error")
+	}
+	
+	time := time.Now().Format(time.RFC3339)
+	_, err  = db.Exec("UPDATE execs SET password = ?, password_changed_at = ?, password_reset_token = NULL, password_token_expires = NULL WHERE id = ?", hashedPassowrd, time, exec.ID )
+	if err != nil {
+		return utils.ErrorHandler(err, "error reseting password")
+	}
+	
+	return nil
 }

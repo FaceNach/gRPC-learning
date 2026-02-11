@@ -49,7 +49,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		}
 
 		if parsedToken.Valid {
-			fmt.Println("Valid JWT")
+			//fmt.Println("Valid JWT")
 
 		} else {
 			http.Error(w, "invalid login Token", http.StatusUnauthorized)
