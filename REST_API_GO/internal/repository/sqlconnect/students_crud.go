@@ -12,11 +12,12 @@ import (
 	"strings"
 )
 
-func GetStudentsDBHandler(r *http.Request) ([]models.Student, error) {
+func GetStudentsDBHandler(r *http.Request, page, limit int) ([]models.Student, int, error) {
+	var Zero int
 	db, err := ConnectDb()
 	if err != nil {
 		fmt.Println(err)
-		return nil, utils.ErrorHandler(err, "error retrieving data")
+		return nil, Zero, utils.ErrorHandler(err, "error retrieving data")
 	}
 	defer db.Close()
 
@@ -26,11 +27,16 @@ func GetStudentsDBHandler(r *http.Request) ([]models.Student, error) {
 	query, args = addFiltersToGetStudentsQuery(r, query, args)
 	query = addFilterSortByStudent(r, query)
 
+	offset := (page - 1) * limit
+	query += " LIMIT ? OFFSET ?"
+
+	args = append(args, limit, offset)
+
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		fmt.Println(err)
 
-		return nil, utils.ErrorHandler(err, "error retrieving data")
+		return nil, Zero, utils.ErrorHandler(err, "error retrieving data")
 	}
 
 	defer rows.Close()
@@ -44,13 +50,21 @@ func GetStudentsDBHandler(r *http.Request) ([]models.Student, error) {
 
 		if err != nil {
 			fmt.Println(err)
-			return nil, utils.ErrorHandler(err, "error retrieving data")
+			return nil, Zero, utils.ErrorHandler(err, "error retrieving data")
 		}
 
 		studentList = append(studentList, student)
 	}
 
-	return studentList, nil
+	//get total count
+
+	var totalStudents int
+	err = db.QueryRow("SELECT COUNT(*) FROM students").Scan(&totalStudents)
+	if err != nil {
+		return nil, Zero, utils.ErrorHandler(err, "error retriving total students data")
+	}
+
+	return studentList, totalStudents, nil
 }
 
 func addFiltersToGetStudentsQuery(r *http.Request, query string, args []any) (string, []interface{}) {

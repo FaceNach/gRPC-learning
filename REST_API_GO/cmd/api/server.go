@@ -54,6 +54,7 @@ func main() {
 	//secureMux := mw.SecurityHeaders(router) 
 	jwtMiddleware := mw.MiddlewaresExcludePaths(mw.JWTMiddleware,"/execs/login")
 	secureMux := jwtMiddleware(mw.SecurityHeaders(router)) 
+	//secureMux := mw.XSSMiddleware(router)
 
 	server := &http.Server{
 		Addr:      os.Getenv("API_PORT"),

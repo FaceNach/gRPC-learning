@@ -14,7 +14,9 @@ import (
 
 func GetStudentsHandler(w http.ResponseWriter, r *http.Request) {
 
-	studentList, err := sqlconnect.GetStudentsDBHandler(r)
+	page, limit := getPaginationParams(r)
+
+	studentList, totalCountStudents, err := sqlconnect.GetStudentsDBHandler(r, page, limit)
 	if err != nil {
 		log.Printf("error: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -22,13 +24,17 @@ func GetStudentsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := struct {
-		Status string           `json:"status"`
-		Count  int              `json:"count"`
-		Data   []models.Student `json:"data"`
+		Status   string           `json:"status"`
+		Count    int              `json:"count"`
+		Page     int              `json:"page"`
+		PageSize int              `json:"page_size"`
+		Data     []models.Student `json:"data"`
 	}{
-		Status: "success",
-		Count:  len(studentList),
-		Data:   studentList,
+		Status:   "success",
+		Count:    totalCountStudents,
+		Page:     page,
+		PageSize: limit,
+		Data:     studentList,
 	}
 
 	w.Header().Set("Content-type", "application/json")
@@ -38,6 +44,20 @@ func GetStudentsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error getting all the students data", http.StatusBadRequest)
 		return
 	}
+
+}
+
+func getPaginationParams(r *http.Request) (int, int) {
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil {
+		page = 1
+	}
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil {
+		limit = 10
+	}
+
+	return page, limit
 
 }
 
