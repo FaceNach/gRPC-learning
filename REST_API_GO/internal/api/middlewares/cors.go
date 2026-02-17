@@ -6,13 +6,14 @@ import (
 )
 
 //api is hosted at www.myapi.com
-// frontend server is at 
+// frontend server is at
 
 //Allowed Origins
 var allowedOrigins =[] string {
 	"https://my-origin-url.com",
 	"https://www.myfrontend.com",
 	"https://localhost:3000",
+	"http://localhost:3000",
 }
 
 func Cors(next http.Handler) http.Handler{
@@ -20,11 +21,13 @@ func Cors(next http.Handler) http.Handler{
 		
 		origin := r.Header.Get("Origin")
 		
-		if !slices.Contains(allowedOrigins, origin){
+		if origin != "" && !slices.Contains(allowedOrigins, origin){
 			http.Error(w, "Forbidden domain", http.StatusForbidden)
 			return
 		}
 		
+
+		w.Header().Set("Access-Control-Allowed-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authoritazion")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")

@@ -10,15 +10,16 @@ import (
 	"rest_api_go/internal/api/router"
 	"rest_api_go/internal/repository/sqlconnect"
 	"rest_api_go/pkg/utils"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	
+
 	err := godotenv.Load()
 	if err != nil {
-		return 
+		return
 	}
 
 	fmt.Println("Connecting to DB")
@@ -27,10 +28,8 @@ func main() {
 		utils.ErrorHandler(err, "error connecting to DB")
 		return
 	}
-	
+
 	fmt.Println("Connected to DB/MariaDB successfully")
-	
-	router := router.MainRouter()
 
 	cert := "cert.pem"
 	key := "key.pem"
@@ -38,23 +37,20 @@ func main() {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
+	router := router.MainRouter()
 
-	// rl := mw.NewRateLimiter(5, time.Minute)
+	rl := mw.NewRateLimiter(5, time.Minute)
 
-	// hppOptions := mw.HPPOptions{
-	// 	CheckQuery: true,
-	// 	CheckBody: true,
-	// 	CheckBodyOnlyForContentType: "application/x-www-form-urlencoded",
-	// 	WhiteList: []string{"sortBy", "sortOrder", "name", "age", "class"},
-
-	// }
+	hppOptions := mw.HPPOptions{
+		CheckQuery:                  true,
+		CheckBody:                   true,
+		CheckBodyOnlyForContentType: "application/x-www-form-urlencoded",
+		WhiteList:                   []string{"sortBy", "sortOrder", "name", "age", "class"},
+	}
 
 	//secureMux := mw.Cors(rl.Middleware(mw.ResponseTime(mw.SecurityHeaders(mw.Compression(mw.Hpp(hppOptions)(mux))))))
-	//secureMux := utils.ApplyMidlewares(mux, mw.Hpp(hppOptions), mw.Compression, mw.SecurityHeaders, mw.ResponseTime, rl.Middleware, mw.Cors)
-	//secureMux := mw.SecurityHeaders(router) 
-	jwtMiddleware := mw.MiddlewaresExcludePaths(mw.JWTMiddleware,"/execs/login")
-	secureMux := jwtMiddleware(mw.SecurityHeaders(router)) 
-	//secureMux := mw.XSSMiddleware(router)
+	jwtMiddleware := mw.MiddlewaresExcludePaths(mw.JWTMiddleware, "/execs/login", "/execs/forgotpassword", "/execs/resetpassword/reset")
+	secureMux := utils.ApplyMidlewares(router, mw.Hpp(hppOptions), mw.Compression, mw.SecurityHeaders, mw.XSSMiddleware, jwtMiddleware, mw.ResponseTime, rl.Middleware, mw.Cors)
 
 	server := &http.Server{
 		Addr:      os.Getenv("API_PORT"),

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"rest_api_go/internal/models"
 	"rest_api_go/internal/repository/sqlconnect"
+	"rest_api_go/pkg/utils"
 	"strconv"
 )
 
@@ -355,6 +356,12 @@ func GetStudentsByTeacherId(w http.ResponseWriter, r *http.Request){
 }
 
 func GetStudentsCountByTeacherId(w http.ResponseWriter, r *http.Request){
+	
+	_, err := utils.AuthorizeUser(r.Context().Value(utils.ContextKey("role")).(string), "admin", "manager", "exec" )
+	if err != nil{
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	
 	teacherId := r.PathValue("id")
 	
